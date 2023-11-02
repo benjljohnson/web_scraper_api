@@ -1,13 +1,12 @@
+// server.js
+
 const express = require('express');
-const requestPromise = require('request-promise');
-const cheerio = require('cheerio');
-const cors = require('cors');  // Make sure you've installed the 'cors' package
+const { exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(cors());  // This enables CORS for all routes. Adjust as needed.
 
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
@@ -16,23 +15,15 @@ app.post('/scrape', async (req, res) => {
         return res.status(400).json({ error: 'URL is required.' });
     }
 
-    try {
-        const body = await requestPromise(url);
-        const $ = cheerio.load(body);
-        const externalLinks = [];
+    exec(`python scrape_external_links.py "${url}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`exec error: ${error}`);
+            return res.status(500).json({ error: 'Failed to scrape the website.' });
+        }
 
-        $('a').each((index, element) => {
-            const link = $(element).attr('href');
-            if (link && link.startsWith('http')) {
-                externalLinks.push(link);
-            }
-        });
-
+        const externalLinks = stdout ? JSON.parse(stdout) : [];
         res.json({ externalLinks });
-    } catch (error) {
-        console.error("Error scraping:", error.message);
-        res.status(500).json({ error: `Failed to scrape the website. Reason: ${error.message}` });
-    }
+    });
 });
 
 app.listen(PORT, () => {
